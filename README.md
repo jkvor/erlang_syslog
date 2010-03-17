@@ -15,6 +15,6 @@
     ...
     Tue Mar 16 18:36:48 192.168.1.101  wombat[4294967295] <Info>: happy
 
-### Chill and be happy knowing your logs are logged
+### Get your head scratched and be happy...
 
 ![wombat](http://neatorama.cachefly.net/images/uploads/2007/05/450_happywombat.jpg)
