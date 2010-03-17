@@ -1,3 +1,8 @@
+### Enable UDP
+
+Ensure that syslogd has udp sockets enabled:
+[OS X](http://stackoverflow.com/questions/1185554/how-to-enable-syslogd-to-receive-udp-logs-from-routers-in-osx)
+
 ### Build
 
     make
