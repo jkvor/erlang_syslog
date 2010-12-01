@@ -28,7 +28,7 @@
          handle_info/2, terminate/2, code_change/3]).
 
 %% api callbacks
--export([start_link/0, send/3, send/4]).
+-export([start_link/0, start_link/3, send/1, send/2, send/3]).
 
 -record(state, {socket, address, port}).
 
@@ -36,14 +36,28 @@
 %% api callbacks
 %%====================================================================
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    {ok, Host} = inet:gethostname(),
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Host, 514], []).
 
-send(Who, Level, Msg) when is_atom(Who), is_atom(Level), is_list(Msg) ->
-    gen_server:cast(?MODULE, {send, Who, Level, Msg}).
-    
-send(Facility, Who, Level, Msg) when is_integer(Facility), is_atom(Who), is_atom(Level), is_list(Msg) ->
-    gen_server:cast(?MODULE, {send, Facility, Who, Level, Msg}).
-    
+start_link(Name, Host, Port) when is_atom(Name), is_list(Host), is_integer(Port) ->
+    gen_server:start_link({local, Name}, ?MODULE, [Host, Port], []).
+
+send(Msg) when is_list(Msg) ->
+    send(?MODULE, Msg, []).
+
+send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
+    send(?MODULE, Msg, Opts);
+
+send(Name, Msg) when is_atom(Name), is_list(Msg) ->
+    send(Name, Msg, []).
+
+send(Name, Msg, Opts) when is_atom(Name), is_list(Msg), is_list(Opts) ->
+    Level = get_level(Opts),
+    Ident = get_ident(Opts),
+    Pid = get_pid(Opts),
+    Packet = ["<", Level, "> ", Ident, "[", Pid, "]: ", Msg, "\n"],
+    gen_server:cast(Name, {send, iolist_to_binary(Packet)}).
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -55,16 +69,16 @@ send(Facility, Who, Level, Msg) when is_integer(Facility), is_atom(Who), is_atom
 %%                         {stop, Reason}
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
-init([]) ->
+init([Host, Port]) ->
     case gen_udp:open(0) of
         {ok, Socket} -> 
-            {ok, Hostname} = inet:gethostname(),
             {ok, #state{
                     socket = Socket,
-                    address = Hostname,
-                    port = 514
+                    address = Host,
+                    port = Port
             }};
-        {error, Reason} -> {stop, Reason}
+        {error, Reason} ->
+            {stop, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -85,16 +99,13 @@ handle_call(_Msg, _From, State) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
-handle_cast({send, Who, Level, Msg}, State) ->
-    Packet = ["<", atom_to_level(Level)+48, "> ", atom_to_list(Who), ": ", Msg, "\n"],
-    do_send(State, Packet),
+handle_cast({send, Packet}, #state{socket=Socket, address=Address, port=Port}=State) when is_binary(Packet) ->
+    gen_udp:send(Socket, Address, Port, Packet),
     {noreply, State};
-    
-handle_cast({send, Facility, Who, Level, Msg}, State) ->
-    Packet = ["<", (Facility bor atom_to_level(Level))+48, "> ", atom_to_list(Who), ": ", Msg, "\n"],
-    do_send(State, Packet),
+
+handle_cast(_Msg, State) ->
     {noreply, State}.
-    
+
 %%--------------------------------------------------------------------
 %% Function: handle_info(Info, State) -> {noreply, State} |
 %%                                       {noreply, State, Timeout} |
@@ -124,8 +135,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-do_send(#state{socket=Socket, address=Address, port=Port}, Packet) ->
-    gen_udp:send(Socket, Address, Port, Packet).
+get_level(Opts) ->
+    Facility = proplists:get_value(facility, Opts, 1),
+    Level = atom_to_level(proplists:get_value(level, Opts)),
+    integer_to_list((Facility * 8) + Level).
+
+get_ident(Opts) ->
+    case proplists:get_value(ident, Opts) of
+        Atom when is_atom(Atom) -> atom_to_list(Atom);
+        List when is_list(List) -> List;
+        Binary when is_binary(Binary) -> Binary
+    end.
+
+get_pid(Opts) ->
+    case proplists:get_value(pid, Opts) of
+        undefined -> os:getpid();
+        Atom when is_atom(Atom) -> atom_to_list(Atom);
+        List when is_list(List) -> List;
+        Binary when is_binary(Binary) -> Binary
+    end.
     
 atom_to_level(emergency) -> 0; % system is unusable 
 atom_to_level(alert) -> 1; % action must be taken immediately 
@@ -134,4 +162,5 @@ atom_to_level(error) -> 3; % error conditions
 atom_to_level(warning) -> 4; % warning conditions 
 atom_to_level(notice) -> 5; % normal but significant condition 
 atom_to_level(info) -> 6; % informational
-atom_to_level(debug) -> 7. % debug-level messages 
+atom_to_level(debug) -> 7; % debug-level messages
+atom_to_level(_) -> atom_to_level(info). % default to info
