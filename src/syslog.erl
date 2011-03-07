@@ -52,10 +52,13 @@ send(Name, Msg) when is_atom(Name), is_list(Msg) ->
     send(Name, Msg, []).
 
 send(Name, Msg, Opts) when is_atom(Name), is_list(Msg), is_list(Opts) ->
-    Level = get_level(Opts),
-    Ident = get_ident(Opts),
-    Pid = get_pid(Opts),
-    Packet = ["<", Level, "> ", Ident, "[", Pid, "]: ", Msg, "\n"],
+    Level    = get_level(Opts),
+    Facility = get_facility(Opts),
+    Priority = get_priority(Level, Facility),
+    Ident    = get_ident(Opts),
+    Pid      = get_pid(Opts),
+
+    Packet = ["<", Priority, "> ", Ident, "[", Pid, "]: ", Msg, "\n"],
     gen_server:cast(Name, {send, iolist_to_binary(Packet)}).
 
 %%====================================================================
@@ -137,9 +140,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 get_level(Opts) ->
-    Facility = proplists:get_value(facility, Opts, 1),
-    Level = atom_to_level(proplists:get_value(level, Opts)),
-    integer_to_list((Facility * 8) + Level).
+    atom_to_level(proplists:get_value(level, Opts)).
+
+get_facility(Opts) ->
+    atom_to_facility(proplists:get_value(facility, Opts, user)).
+
+get_priority(Level, Facility) ->
+    integer_to_list(Level + Facility).
 
 get_ident(Opts) ->
     case proplists:get_value(ident, Opts) of
@@ -157,11 +164,40 @@ get_pid(Opts) ->
     end.
 
 atom_to_level(emergency) -> 0; % system is unusable
-atom_to_level(alert) -> 1; % action must be taken immediately
-atom_to_level(critical) -> 2; % critical conditions
-atom_to_level(error) -> 3; % error conditions
-atom_to_level(warning) -> 4; % warning conditions
-atom_to_level(notice) -> 5; % normal but significant condition
-atom_to_level(info) -> 6; % informational
-atom_to_level(debug) -> 7; % debug-level messages
-atom_to_level(_) -> atom_to_level(info). % default to info
+atom_to_level(alert)     -> 1; % action must be taken immediately
+atom_to_level(critical)  -> 2; % critical conditions
+atom_to_level(error)     -> 3; % error conditions
+atom_to_level(warning)   -> 4; % warning conditions
+atom_to_level(notice)    -> 5; % normal but significant condition
+atom_to_level(info)      -> 6; % informational
+atom_to_level(debug)     -> 7; % debug-level messages
+atom_to_level(_)         -> atom_to_level(info). % default to info
+
+
+%% Copied from the c driver syslog project:
+%% https://github.com/Vagabond/erlang-syslog/blob/master/src/syslog.erl#L141
+atom_to_facility(kern)                 -> 0;
+atom_to_facility(user)                 -> 8;
+atom_to_facility(mail)                 -> 16;
+atom_to_facility(daemon)               -> 24;
+atom_to_facility(auth)                 -> 32;
+atom_to_facility(syslog)               -> 40;
+atom_to_facility(lpr)                  -> 48;
+atom_to_facility(news)                 -> 56;
+atom_to_facility(uucp)                 -> 64;
+atom_to_facility(cron)                 -> 72;
+atom_to_facility(authpriv)             -> 80;
+atom_to_facility(ftp)                  -> 88;
+atom_to_facility(netinfo)              -> 96;
+atom_to_facility(remoteauth)           -> 104;
+atom_to_facility(install)              -> 112;
+atom_to_facility(ras)                  -> 120;
+atom_to_facility(local0)               -> 16 * 8;
+atom_to_facility(local1)               -> 17 * 8;
+atom_to_facility(local2)               -> 18 * 8;
+atom_to_facility(local3)               -> 19 * 8;
+atom_to_facility(local4)               -> 20 * 8;
+atom_to_facility(local5)               -> 21 * 8;
+atom_to_facility(local6)               -> 22 * 8;
+atom_to_facility(local7)               -> 23 * 8;
+atom_to_facility(N) when is_integer(N) -> N.
