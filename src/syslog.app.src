@@ -1,0 +1,7 @@
+{application, syslog, [
+    {description, "Erlang syslog client"},
+    {vsn, "1.0"},
+    {modules, []},
+    {applications, [kernel, stdlib]},
+    {registered, []}
+]}.

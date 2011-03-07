@@ -56,7 +56,7 @@ send(Name, Msg, Opts) when is_atom(Name), is_list(Msg), is_list(Opts) ->
     Ident = get_ident(Opts),
     Pid = get_pid(Opts),
     Packet = ["<", Level, "> ", Ident, "[", Pid, "]: ", Msg, "\n"],
-    gen_server:call(Name, {send, iolist_to_binary(Packet)}).
+    gen_server:cast(Name, {send, iolist_to_binary(Packet)}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -91,8 +91,7 @@ init([Host, Port]) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
-handle_call({send, Packet}, _From, #state{socket=Socket, address=Address, port=Port}=State) when is_binary(Packet) ->
-    gen_udp:send(Socket, Address, Port, Packet),
+handle_call(_Msg, _From, State) ->
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
@@ -101,6 +100,10 @@ handle_call({send, Packet}, _From, #state{socket=Socket, address=Address, port=P
 %%                                      {stop, Reason, State}
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
+handle_cast({send, Packet}, #state{socket=Socket, address=Address, port=Port}=State) when is_binary(Packet) ->
+    gen_udp:send(Socket, Address, Port, Packet),
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
