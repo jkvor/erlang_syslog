@@ -57,7 +57,7 @@ send(Msg) when is_list(Msg) ->
 
 send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
     Packet = build_packet(Msg, Opts),
-    io:format("~p~n", [Packet]),
+    %io:format("~p~n", [Packet]),
     gen_server:cast(?MODULE, {send, Packet}).
 
 %%====================================================================
