@@ -6,16 +6,17 @@ Ensure that syslogd has udp sockets enabled:
 ### Build
 
     make
-    
+
 ### Log
 
-    0> application:start(syslog).
+    0> syslog:start_link(appname, "localhost", 514, local0).
     ok
-    1> syslog:send(wombat, info, "happy").
+    1> syslog:send("test").
     ok
-    
+    2> syslog:send("test", [{level, debug}]).
+
 ### Logged
 
     $ syslog
     ...
-    Tue Mar 16 18:36:48 192.168.1.101  wombat[4294967295] <Info>: happy
+    Tue Mar 16 18:36:48 192.168.1.101  appname[4294967295] <Debug>: test

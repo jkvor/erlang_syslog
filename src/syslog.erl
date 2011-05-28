@@ -20,6 +20,9 @@
 %% WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 %% OTHER DEALINGS IN THE SOFTWARE.
+
+%% syslog rfc: http://www.faqs.org/rfcs/rfc3164.html
+
 -module(syslog).
 -behaviour(gen_server).
 
@@ -29,9 +32,9 @@
 
 %% api callbacks
 -export([start_link/0, start_link/4,
-         start_link/3, send/1, send/2, send/3]).
+         start_link/3, send/1, send/2]).
 
--record(state, {socket, address, port, facility}).
+-record(state, {socket, address, port, facility, tag}).
 
 -define(DEFAULT_FACILITY, local0).
 
@@ -40,31 +43,22 @@
 %%====================================================================
 start_link() ->
     {ok, Host} = inet:gethostname(),
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Host, 514, ?DEFAULT_FACILITY], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [?MODULE, Host, 514, ?DEFAULT_FACILITY], []).
 
-start_link(Name, Host, Port) when is_atom(Name), is_list(Host), is_integer(Port) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Host, Port, ?DEFAULT_FACILITY], []).
+start_link(Tag, Host, Port) when is_atom(Tag), is_list(Host), is_integer(Port) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Tag, Host, Port, ?DEFAULT_FACILITY], []).
 
-start_link(Name, Host, Port, Facility) when is_atom(Name), is_list(Host),
+start_link(Tag, Host, Port, Facility) when is_atom(Tag), is_list(Host),
                                             is_integer(Port), is_atom(Facility) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Host, Port, Facility], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Tag, Host, Port, Facility], []).
 
 send(Msg) when is_list(Msg) ->
-    send(?MODULE, Msg, []).
+    send(Msg, []).
 
 send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
-    send(?MODULE, Msg, Opts);
-
-send(Name, Msg) when is_atom(Name), is_list(Msg) ->
-    send(Name, Msg, []).
-
-send(Name, Msg, Opts) when is_atom(Name), is_list(Msg), is_list(Opts) ->
-    Facility = get_facility(Name),
-    Level = get_level(Facility, Opts),
-    Ident = get_ident(Opts),
-    Pid = get_pid(Opts),
-    Packet = ["<", Level, "> ", Ident, "[", Pid, "]: ", Msg, "\n"],
-    gen_server:cast(Name, {send, iolist_to_binary(Packet)}).
+    Packet = build_packet(Msg, Opts),
+    io:format("~p~n", [Packet]),
+    gen_server:cast(?MODULE, {send, Packet}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -77,7 +71,7 @@ send(Name, Msg, Opts) when is_atom(Name), is_list(Msg), is_list(Opts) ->
 %%                         {stop, Reason}
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
-init([Host, Port, Facility]) ->
+init([Tag, Host, Port, Facility]) ->
     {ok, Addr} = inet:getaddr(Host, inet),
     case gen_udp:open(0) of
         {ok, Socket} ->
@@ -85,7 +79,8 @@ init([Host, Port, Facility]) ->
                     socket = Socket,
                     address = Addr,
                     port = Port,
-                    facility = Facility
+                    facility = Facility,
+                    tag = Tag
             }};
         {error, Reason} ->
             {stop, Reason}
@@ -101,7 +96,9 @@ init([Host, Port, Facility]) ->
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
 handle_call(facility, _From, #state{facility=Facility}=State) ->
-    {reply, Facility, State}.
+    {reply, Facility, State};
+handle_call(tag,  _From, #state{tag=Tag}=State) ->
+    {reply, Tag, State}.
 
 %%--------------------------------------------------------------------
 %% Function: handle_cast(Msg, State) -> {noreply, State} |
@@ -149,8 +146,8 @@ get_level(Facility, Opts) ->
     Level = atom_to_level(proplists:get_value(level, Opts)),
     integer_to_list((Facility * 8) + Level).
 
-get_ident(Opts) ->
-    case proplists:get_value(ident, Opts, get_hostname()) of
+get_tag() ->
+    case gen_server:call(?MODULE, tag) of
         Atom when is_atom(Atom) -> atom_to_list(Atom);
         List when is_list(List) -> List;
         Binary when is_binary(Binary) -> Binary
@@ -164,13 +161,45 @@ get_pid(Opts) ->
         Binary when is_binary(Binary) -> Binary
     end.
 
-get_facility(Name) ->
-    Facility = gen_server:call(Name, facility),
+get_facility() ->
+    Facility = gen_server:call(?MODULE, facility),
     facility(Facility).
 
 get_hostname() ->
     {ok, Host} = inet:gethostname(),
     Host.
+
+get_timestamp() ->
+    {{_,Month,Day},{Hr,Min,Sec}} = calendar:local_time(),
+    StringMonth = httpd_util:month(Month),
+
+    StringMonth ++ " "
+        ++ maybe_add_padding(Day) ++ " "
+        ++ maybe_add_padding(Hr) ++ ":"
+        ++ maybe_add_padding(Min) ++ ":"
+        ++ maybe_add_padding(Sec).
+
+maybe_add_padding(Int) when Int < 10 ->
+    "0" ++ integer_to_list(Int);
+maybe_add_padding(Int) ->
+    integer_to_list(Int).
+
+build_packet(Msg, Opts) ->
+    Tag = get_tag(),
+    Pid = get_pid(Opts),
+    Hostname = get_hostname(),
+    Timestamp = get_timestamp(),
+
+    Facility = get_facility(),
+    Level = get_level(Facility, Opts),
+
+    Packet = [
+              "<", Level, "> ",
+              Timestamp, " ", Hostname, " ",
+              Tag, "[", Pid, "]: ", Msg, "\n"
+             ],
+
+    iolist_to_binary(Packet).
 
 atom_to_level(emergency) -> 0; % system is unusable
 atom_to_level(alert) -> 1; % action must be taken immediately
