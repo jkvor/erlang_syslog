@@ -31,8 +31,10 @@
          handle_info/2, terminate/2, code_change/3]).
 
 %% api callbacks
--export([start_link/0, start_link/4,
-         start_link/3, send/1, send/2]).
+-export([start_link/0, start_link/1, start_link/3,
+         start_link/4, start_link/5, send/1, send/2,
+         send/3
+        ]).
 
 -record(state, {socket, address, port, facility, tag}).
 
@@ -45,20 +47,31 @@ start_link() ->
     {ok, Host} = inet:gethostname(),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [?MODULE, Host, 514, ?DEFAULT_FACILITY], []).
 
-start_link(Tag, Host, Port) when is_atom(Tag), is_list(Host), is_integer(Port) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Tag, Host, Port, ?DEFAULT_FACILITY], []).
+start_link(Name) ->
+    {ok, Host} = inet:gethostname(),
+    gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, 514, ?DEFAULT_FACILITY], []).
 
-start_link(Tag, Host, Port, Facility) when is_atom(Tag), is_list(Host),
-                                            is_integer(Port), is_atom(Facility) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Tag, Host, Port, Facility], []).
+start_link(Name, Host, Port) when is_atom(Name), is_list(Host), is_integer(Port) ->
+    gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, Port, ?DEFAULT_FACILITY], []).
+
+start_link(Name, Host, Port, Facility) when is_atom(Name), is_list(Host),
+                                           is_integer(Port), is_atom(Facility) ->
+    gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, Port, Facility], []).
+
+start_link(Name, Tag, Host, Port, Facility) when is_atom(Name), is_atom(Tag), is_list(Host),
+                                                 is_integer(Port), is_atom(Facility) ->
+    gen_server:start_link({local, Name}, ?MODULE, [Tag, Host, Port, Facility], []).
 
 send(Msg) when is_list(Msg) ->
-    send(Msg, []).
+    send(?MODULE, Msg).
 
-send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
-    Packet = build_packet(Msg, Opts),
+send(Name, Msg) when is_list(Msg) ->
+    send(Name, Msg, []).
+
+send(Name, Msg, Opts) when is_list(Msg), is_list(Opts) ->
+    Packet = build_packet(Name, Msg, Opts),
     %io:format("~p~n", [Packet]),
-    gen_server:cast(?MODULE, {send, Packet}).
+    gen_server:cast(Name, {send, Packet}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -146,8 +159,8 @@ get_level(Facility, Opts) ->
     Level = atom_to_level(proplists:get_value(level, Opts)),
     integer_to_list((Facility * 8) + Level).
 
-get_tag() ->
-    case gen_server:call(?MODULE, tag) of
+get_tag(Name) ->
+    case gen_server:call(Name, tag) of
         Atom when is_atom(Atom) -> atom_to_list(Atom);
         List when is_list(List) -> List;
         Binary when is_binary(Binary) -> Binary
@@ -161,8 +174,8 @@ get_pid(Opts) ->
         Binary when is_binary(Binary) -> Binary
     end.
 
-get_facility() ->
-    Facility = gen_server:call(?MODULE, facility),
+get_facility(Name) ->
+    Facility = gen_server:call(Name, facility),
     facility(Facility).
 
 get_hostname() ->
@@ -184,13 +197,13 @@ maybe_add_padding(Int) when Int < 10 ->
 maybe_add_padding(Int) ->
     integer_to_list(Int).
 
-build_packet(Msg, Opts) ->
-    Tag = get_tag(),
+build_packet(Name, Msg, Opts) ->
+    Tag = get_tag(Name),
     Pid = get_pid(Opts),
     Hostname = get_hostname(),
     Timestamp = get_timestamp(),
 
-    Facility = get_facility(),
+    Facility = get_facility(Name),
     Level = get_level(Facility, Opts),
 
     Packet = [

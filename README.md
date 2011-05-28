@@ -9,14 +9,13 @@ Ensure that syslogd has udp sockets enabled:
 
 ### Log
 
-    0> syslog:start_link(appname, "localhost", 514, local0).
+    0> syslog:start_link(name, tag, "localhost", 514, local0).
     ok
-    1> syslog:send("test").
+    2> syslog:send(name, "test").
     ok
-    2> syslog:send("test", [{level, debug}]).
 
 ### Logged
 
     $ syslog
     ...
-    Tue Mar 16 18:36:48 192.168.1.101  appname[4294967295] <Debug>: test
+    Tue Mar 16 18:36:48 192.168.1.101  tag[4294967295] <Info>: test
