@@ -31,10 +31,16 @@
          handle_info/2, terminate/2, code_change/3]).
 
 %% api callbacks
--export([start_link/0, start_link/1, start_link/3,
-         start_link/4, start_link/5, send/1, send/2,
-         send/3
-        ]).
+-export([start_link/0, start_link/1, start_link/3, start_link/4, start_link/5,
+         send/1, send/2, send/3,
+         emergency/1, emergency/2, emergency/3,
+         alert/1, alert/2, alert/3,
+         critical/1, critical/2, critical/3,
+         error/1, error/2, error/3,
+         warning/1, warning/2, warning/3,
+         notice/1, notice/2, notice/3,
+         info/1, info/2, info/3,
+         debug/1, debug/2, debug/3]).
 
 -record(state, {socket, address, port, facility, tag}).
 
@@ -72,6 +78,78 @@ send(Name, Msg, Opts) when is_list(Msg), is_list(Opts) ->
     Packet = build_packet(Name, Msg, Opts),
     %io:format("~p~n", [Packet]),
     gen_server:cast(Name, {send, Packet}).
+
+emergency(Msg) ->
+  emergency(?MODULE, Msg, []).
+
+emergency(Name, Msg) ->
+  emergency(Name, Msg, []).
+
+emergency(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, emergency}] ++ Opts).
+
+alert(Msg) ->
+  alert(?MODULE, Msg, []).
+
+alert(Name, Msg) ->
+  alert(Name, Msg, []).
+
+alert(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, alert}] ++ Opts).
+
+critical(Msg) ->
+  critical(?MODULE, Msg, []).
+
+critical(Name, Msg) ->
+  critical(Name, Msg, []).
+
+critical(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, critical}] ++ Opts).
+
+error(Msg) ->
+  error(?MODULE, Msg, []).
+
+error(Name, Msg) ->
+  error(Name, Msg, []).
+
+error(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, error}] ++ Opts).
+
+warning(Msg) ->
+  warning(?MODULE, Msg, []).
+
+warning(Name, Msg) ->
+  warning(Name, Msg, []).
+
+warning(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, warning}] ++ Opts).
+
+notice(Msg) ->
+  notice(?MODULE, Msg, []).
+
+notice(Name, Msg) ->
+  notice(Name, Msg, []).
+
+notice(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, notice}] ++ Opts).
+
+info(Msg) ->
+  info(?MODULE, Msg, []).
+
+info(Name, Msg) ->
+  info(Name, Msg, []).
+
+info(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, info}] ++ Opts).
+
+debug(Msg) ->
+  debug(?MODULE, Msg, []).
+
+debug(Name, Msg) ->
+  debug(Name, Msg, []).
+
+debug(Name, Msg, Opts) ->
+  send(Name, Msg, [{level, debug}] ++ Opts).
 
 %%====================================================================
 %% gen_server callbacks
