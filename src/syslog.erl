@@ -48,10 +48,10 @@ send(Msg) when is_list(Msg) ->
 send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
     send(?MODULE, Msg, Opts);
 
-send(Name, Msg) when is_atom(Name), is_list(Msg) ->
+send(Name, Msg) when is_pid(Name) ; is_atom(Name), is_list(Msg) ->
     send(Name, Msg, []).
 
-send(Name, Msg, Opts) when is_atom(Name), is_list(Msg), is_list(Opts) ->
+send(Name, Msg, Opts) when is_pid(Name) ; is_atom(Name), is_list(Msg), is_list(Opts) ->
     Level = get_level(Opts),
     Ident = get_ident(Opts),
     Pid = get_pid(Opts),
