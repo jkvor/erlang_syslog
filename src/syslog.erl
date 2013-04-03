@@ -42,7 +42,7 @@
          info/1, info/2, info/3,
          debug/1, debug/2, debug/3]).
 
--record(state, {socket, address, port, facility, tag}).
+-record(state, {socket, address, port, facility, app_name}).
 
 -define(DEFAULT_FACILITY, local0).
 
@@ -64,9 +64,9 @@ start_link(Name, Host, Port, Facility) when is_atom(Name), is_list(Host),
                                            is_integer(Port), is_atom(Facility) ->
     gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, Port, Facility], []).
 
-start_link(Name, Tag, Host, Port, Facility) when is_atom(Name), is_atom(Tag), is_list(Host),
+start_link(Name, AppName, Host, Port, Facility) when is_atom(Name), is_atom(AppName), is_list(Host),
                                                  is_integer(Port), is_atom(Facility) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Tag, Host, Port, Facility], []).
+    gen_server:start_link({local, Name}, ?MODULE, [AppName, Host, Port, Facility], []).
 
 send(Msg) when is_list(Msg) ->
     send(?MODULE, Msg).
@@ -162,7 +162,7 @@ debug(Name, Msg, Opts) ->
 %%                         {stop, Reason}
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
-init([Tag, Host, Port, Facility]) ->
+init([AppName, Host, Port, Facility]) ->
     {ok, Addr} = inet:getaddr(Host, inet),
     case gen_udp:open(0) of
         {ok, Socket} ->
@@ -171,7 +171,7 @@ init([Tag, Host, Port, Facility]) ->
                     address = Addr,
                     port = Port,
                     facility = Facility,
-                    tag = Tag
+                    app_name = AppName
             }};
         {error, Reason} ->
             {stop, Reason}
@@ -188,8 +188,8 @@ init([Tag, Host, Port, Facility]) ->
 %%--------------------------------------------------------------------
 handle_call(facility, _From, #state{facility=Facility}=State) ->
     {reply, Facility, State};
-handle_call(tag,  _From, #state{tag=Tag}=State) ->
-    {reply, Tag, State}.
+handle_call(app_name,  _From, #state{app_name=AppName}=State) ->
+    {reply, AppName, State}.
 
 %%--------------------------------------------------------------------
 %% Function: handle_cast(Msg, State) -> {noreply, State} |
@@ -237,8 +237,16 @@ get_level(Facility, Opts) ->
     Level = atom_to_level(proplists:get_value(level, Opts)),
     integer_to_list((Facility * 8) + Level).
 
-get_tag(Name) ->
-    case gen_server:call(Name, tag) of
+get_app_name(Name) ->
+    case gen_server:call(Name, app_name) of
+        Atom when is_atom(Atom) -> atom_to_list(Atom);
+        List when is_list(List) -> List;
+        Binary when is_binary(Binary) -> Binary
+    end.
+
+get_app_name(Name, Opts) ->
+    case proplists:get_value(app_name, Opts) of
+        undefined -> get_app_name(Name);
         Atom when is_atom(Atom) -> atom_to_list(Atom);
         List when is_list(List) -> List;
         Binary when is_binary(Binary) -> Binary
@@ -273,7 +281,7 @@ format_timestamp(TS) ->
                   [Y,M,D, H,MM,S,US]).
 
 build_packet(Name, Msg, Opts) ->
-    Tag = get_tag(Name),
+    AppName = get_app_name(Name, Opts),
     Pid = get_pid(Opts),
     Hostname = get_hostname(),
     Timestamp = get_timestamp(Opts),
@@ -282,9 +290,13 @@ build_packet(Name, Msg, Opts) ->
     Level = get_level(Facility, Opts),
 
     Packet = [
-              "<", Level, "> ",
-              Timestamp, " ", Hostname, " ",
-              Tag, "[", Pid, "]: ", Msg, "\n"
+              "<", Level, ">1 ", % syslog version 1
+              Timestamp, " ",
+              Hostname, " ",
+              AppName, " ",
+              Pid,
+              " - - ", % MSGID is -, STRUCTURED-DATA is -
+              Msg, "\n"
              ],
 
     iolist_to_binary(Packet).
