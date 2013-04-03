@@ -264,9 +264,15 @@ get_facility(Name) ->
     Facility = gen_server:call(Name, facility),
     facility(Facility).
 
-get_hostname() ->
-    {ok, Host} = inet:gethostname(),
-    Host.
+get_hostname(Opts) ->
+    case proplists:get_value(hostname, Opts) of
+        undefined ->
+            {ok, Host} = inet:gethostname(),
+            Host;
+        Atom when is_atom(Atom) -> atom_to_list(Atom);
+        List when is_list(List) -> List;
+        Binary when is_binary(Binary) -> Binary
+    end.
 
 get_timestamp(Opts) when is_list(Opts) ->
     case proplists:get_value(timestamp, Opts) of
@@ -283,7 +289,7 @@ format_timestamp(TS) ->
 build_packet(Name, Msg, Opts) ->
     AppName = get_app_name(Name, Opts),
     Pid = get_pid(Opts),
-    Hostname = get_hostname(),
+    Hostname = get_hostname(Opts),
     Timestamp = get_timestamp(Opts),
 
     Facility = get_facility(Name),
