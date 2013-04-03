@@ -269,7 +269,7 @@ get_timestamp(Opts) when is_list(Opts) ->
 format_timestamp(TS) ->
     {{Y, M, D}, {H, MM, S}} = calendar:now_to_universal_time(TS),
     US = element(3, TS),
-    io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0B+00:00",
+    io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ",
                   [Y,M,D, H,MM,S,US]).
 
 build_packet(Name, Msg, Opts) ->
