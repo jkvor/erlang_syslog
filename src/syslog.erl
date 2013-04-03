@@ -260,26 +260,23 @@ get_hostname() ->
     {ok, Host} = inet:gethostname(),
     Host.
 
-get_timestamp() ->
-    {{_,Month,Day},{Hr,Min,Sec}} = calendar:local_time(),
-    StringMonth = httpd_util:month(Month),
+get_timestamp(Opts) when is_list(Opts) ->
+    case proplists:get_value(timestamp, Opts) of
+        undefined -> format_timestamp(os:timestamp());
+        Timestamp -> format_timestamp(Timestamp)
+    end.
 
-    StringMonth ++ " "
-        ++ maybe_add_padding(Day) ++ " "
-        ++ maybe_add_padding(Hr) ++ ":"
-        ++ maybe_add_padding(Min) ++ ":"
-        ++ maybe_add_padding(Sec).
-
-maybe_add_padding(Int) when Int < 10 ->
-    "0" ++ integer_to_list(Int);
-maybe_add_padding(Int) ->
-    integer_to_list(Int).
+format_timestamp(TS) ->
+    {{Y, M, D}, {H, MM, S}} = calendar:now_to_universal_time(TS),
+    US = element(3, TS),
+    io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0B+00:00",
+                  [Y,M,D, H,MM,S,US]).
 
 build_packet(Name, Msg, Opts) ->
     Tag = get_tag(Name),
     Pid = get_pid(Opts),
     Hostname = get_hostname(),
-    Timestamp = get_timestamp(),
+    Timestamp = get_timestamp(Opts),
 
     Facility = get_facility(Name),
     Level = get_level(Facility, Opts),

@@ -15,6 +15,8 @@ Ensure that syslogd has udp sockets enabled:
     ok
     3> syslog:notice(name, "other test").
     ok
+    4> syslog:send(name, "test 3", [{timestamp, os:timestamp()}]).
+    ok
 
 ### Logged
 
