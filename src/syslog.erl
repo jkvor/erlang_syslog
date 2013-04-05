@@ -42,7 +42,7 @@
          info/1, info/2, info/3,
          debug/1, debug/2, debug/3]).
 
--record(state, {socket, address, port, facility, tag}).
+-record(state, {socket, address, port, facility, app_name}).
 
 -define(DEFAULT_FACILITY, local0).
 
@@ -64,12 +64,15 @@ start_link(Name, Host, Port, Facility) when is_atom(Name), is_list(Host),
                                            is_integer(Port), is_atom(Facility) ->
     gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, Port, Facility], []).
 
-start_link(Name, Tag, Host, Port, Facility) when is_atom(Name), is_atom(Tag), is_list(Host),
+start_link(Name, AppName, Host, Port, Facility) when is_atom(Name), is_atom(AppName), is_list(Host),
                                                  is_integer(Port), is_atom(Facility) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Tag, Host, Port, Facility], []).
+    gen_server:start_link({local, Name}, ?MODULE, [AppName, Host, Port, Facility], []).
 
 send(Msg) when is_list(Msg) ->
     send(?MODULE, Msg).
+
+send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
+    send(?MODULE, Msg, []);
 
 send(Name, Msg) when is_list(Msg) ->
     send(Name, Msg, []).
@@ -162,7 +165,7 @@ debug(Name, Msg, Opts) ->
 %%                         {stop, Reason}
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
-init([Tag, Host, Port, Facility]) ->
+init([AppName, Host, Port, Facility]) ->
     {ok, Addr} = inet:getaddr(Host, inet),
     case gen_udp:open(0) of
         {ok, Socket} ->
@@ -171,7 +174,7 @@ init([Tag, Host, Port, Facility]) ->
                     address = Addr,
                     port = Port,
                     facility = Facility,
-                    tag = Tag
+                    app_name = AppName
             }};
         {error, Reason} ->
             {stop, Reason}
@@ -188,8 +191,8 @@ init([Tag, Host, Port, Facility]) ->
 %%--------------------------------------------------------------------
 handle_call(facility, _From, #state{facility=Facility}=State) ->
     {reply, Facility, State};
-handle_call(tag,  _From, #state{tag=Tag}=State) ->
-    {reply, Tag, State}.
+handle_call(app_name,  _From, #state{app_name=AppName}=State) ->
+    {reply, AppName, State}.
 
 %%--------------------------------------------------------------------
 %% Function: handle_cast(Msg, State) -> {noreply, State} |
@@ -237,8 +240,16 @@ get_level(Facility, Opts) ->
     Level = atom_to_level(proplists:get_value(level, Opts)),
     integer_to_list((Facility * 8) + Level).
 
-get_tag(Name) ->
-    case gen_server:call(Name, tag) of
+get_app_name(Name) ->
+    case gen_server:call(Name, app_name) of
+        Atom when is_atom(Atom) -> atom_to_list(Atom);
+        List when is_list(List) -> List;
+        Binary when is_binary(Binary) -> Binary
+    end.
+
+get_app_name(Name, Opts) ->
+    case proplists:get_value(app_name, Opts) of
+        undefined -> get_app_name(Name);
         Atom when is_atom(Atom) -> atom_to_list(Atom);
         List when is_list(List) -> List;
         Binary when is_binary(Binary) -> Binary
@@ -256,38 +267,52 @@ get_facility(Name) ->
     Facility = gen_server:call(Name, facility),
     facility(Facility).
 
-get_hostname() ->
-    {ok, Host} = inet:gethostname(),
-    Host.
+get_facility(Name, Opts) ->
+    case proplists:get_value(facility, Opts) of
+        undefined -> get_facility(Name);
+        Facility when is_atom(Facility) -> facility(Facility);
+        Facility when is_integer(Facility) -> Facility
+    end.
 
-get_timestamp() ->
-    {{_,Month,Day},{Hr,Min,Sec}} = calendar:local_time(),
-    StringMonth = httpd_util:month(Month),
+get_hostname(Opts) ->
+    case proplists:get_value(hostname, Opts) of
+        undefined ->
+            {ok, Host} = inet:gethostname(),
+            Host;
+        Atom when is_atom(Atom) -> atom_to_list(Atom);
+        List when is_list(List) -> List;
+        Binary when is_binary(Binary) -> Binary
+    end.
 
-    StringMonth ++ " "
-        ++ maybe_add_padding(Day) ++ " "
-        ++ maybe_add_padding(Hr) ++ ":"
-        ++ maybe_add_padding(Min) ++ ":"
-        ++ maybe_add_padding(Sec).
+get_timestamp(Opts) when is_list(Opts) ->
+    case proplists:get_value(timestamp, Opts) of
+        undefined -> format_timestamp(os:timestamp());
+        Timestamp -> format_timestamp(Timestamp)
+    end.
 
-maybe_add_padding(Int) when Int < 10 ->
-    "0" ++ integer_to_list(Int);
-maybe_add_padding(Int) ->
-    integer_to_list(Int).
+format_timestamp(TS) ->
+    {{Y, M, D}, {H, MM, S}} = calendar:now_to_universal_time(TS),
+    US = element(3, TS),
+    io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ",
+                  [Y,M,D, H,MM,S,US]).
 
 build_packet(Name, Msg, Opts) ->
-    Tag = get_tag(Name),
+    AppName = get_app_name(Name, Opts),
     Pid = get_pid(Opts),
-    Hostname = get_hostname(),
-    Timestamp = get_timestamp(),
+    Hostname = get_hostname(Opts),
+    Timestamp = get_timestamp(Opts),
 
-    Facility = get_facility(Name),
+    Facility = get_facility(Name, Opts),
     Level = get_level(Facility, Opts),
 
     Packet = [
-              "<", Level, "> ",
-              Timestamp, " ", Hostname, " ",
-              Tag, "[", Pid, "]: ", Msg, "\n"
+              "<", Level, ">1 ", % syslog version 1
+              Timestamp, " ",
+              Hostname, " ",
+              AppName, " ",
+              Pid,
+              " - - ", % MSGID is -, STRUCTURED-DATA is -
+              Msg, "\n"
              ],
 
     iolist_to_binary(Packet).
