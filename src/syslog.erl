@@ -267,6 +267,12 @@ get_facility(Name) ->
     Facility = gen_server:call(Name, facility),
     facility(Facility).
 
+get_facility(Name, Opts) ->
+    case proplists:get_value(facility, Opts) of
+        undefined -> get_facility(Name);
+        Facility when is_integer(Facility) -> Facility
+    end.
+
 get_hostname(Opts) ->
     case proplists:get_value(hostname, Opts) of
         undefined ->
@@ -295,7 +301,7 @@ build_packet(Name, Msg, Opts) ->
     Hostname = get_hostname(Opts),
     Timestamp = get_timestamp(Opts),
 
-    Facility = get_facility(Name),
+    Facility = get_facility(Name, Opts),
     Level = get_level(Facility, Opts),
 
     Packet = [
