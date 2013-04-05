@@ -71,6 +71,9 @@ start_link(Name, AppName, Host, Port, Facility) when is_atom(Name), is_atom(AppN
 send(Msg) when is_list(Msg) ->
     send(?MODULE, Msg).
 
+send(Msg, Opts) when is_list(Msg), is_list(Opts) ->
+    send(?MODULE, Msg, []);
+
 send(Name, Msg) when is_list(Msg) ->
     send(Name, Msg, []).
 
