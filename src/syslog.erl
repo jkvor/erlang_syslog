@@ -270,6 +270,7 @@ get_facility(Name) ->
 get_facility(Name, Opts) ->
     case proplists:get_value(facility, Opts) of
         undefined -> get_facility(Name);
+        Facility when is_atom(Facility) -> facility(Facility);
         Facility when is_integer(Facility) -> Facility
     end.
 
