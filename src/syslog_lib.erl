@@ -87,8 +87,12 @@ send(Name, Msg, Opts) when is_list(Msg), is_list(Opts) ->
     Packet = build_packet(Name, Msg, Opts),
     %io:format("~p~n", [Packet]),
     case gen_udp:open(0) of
-        {ok, Socket} -> gen_udp:send(Socket, Address, Port, Packet);
-        {error, Reason} -> {error, Reason}
+        {ok, Socket} ->
+           Res = gen_udp:send(Socket, Address, Port, Packet),
+           catch gen_udp:close(Socket),
+           Res;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 emergency(Name, Msg) ->
