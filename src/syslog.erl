@@ -57,14 +57,14 @@ start_link(Name) ->
     {ok, Host} = inet:gethostname(),
     gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, 514, ?DEFAULT_FACILITY], []).
 
-start_link(Name, Host, Port) when is_atom(Name), is_list(Host), is_integer(Port) ->
+start_link(Name, Host, Port) when is_atom(Name), is_list(Host) ; is_tuple(Host), is_integer(Port) ->
     gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, Port, ?DEFAULT_FACILITY], []).
 
-start_link(Name, Host, Port, Facility) when is_atom(Name), is_list(Host),
+start_link(Name, Host, Port, Facility) when is_atom(Name), is_list(Host) ; is_tuple(Host),
                                            is_integer(Port), is_atom(Facility) ->
     gen_server:start_link({local, Name}, ?MODULE, [?MODULE, Host, Port, Facility], []).
 
-start_link(Name, AppName, Host, Port, Facility) when is_atom(Name), is_atom(AppName), is_list(Host),
+start_link(Name, AppName, Host, Port, Facility) when is_atom(Name), is_atom(AppName), is_list(Host) ; is_tuple(Host),
                                                  is_integer(Port), is_atom(Facility) ->
     gen_server:start_link({local, Name}, ?MODULE, [AppName, Host, Port, Facility], []).
 
@@ -166,7 +166,13 @@ debug(Name, Msg, Opts) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([AppName, Host, Port, Facility]) ->
-    {ok, Addr} = inet:getaddr(Host, inet),
+    case is_tuple(Host) of
+        true ->
+            Addr = Host;
+        false ->
+            {ok, Addr} = inet:getaddr(Host, inet)
+    end,
+
     case gen_udp:open(0) of
         {ok, Socket} ->
             {ok, #state{
@@ -232,4 +238,3 @@ terminate(_Reason, _State) ->
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
