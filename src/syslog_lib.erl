@@ -26,7 +26,7 @@
 -module(syslog_lib).
 
 -export([build_packet/3]).
--export([init_table/5, terminate_table/1,
+-export([init_table/6, terminate_table/1,
          send/2, send/3,
          emergency/2, emergency/3,
          alert/2, alert/3,
@@ -43,12 +43,14 @@
 %% api
 %%================================
 
--spec init_table(Name::atom(), AppName::atom(), Host::list(),
-                 Port::non_neg_integer(), Facility::atom()) -> ets:tid().
-init_table(Name, AppName, Host, Port, Facility) when is_atom(Name), is_atom(AppName), is_list(Host),
-                                                     is_integer(Port), is_atom(Facility) ->
+-spec init_table(Name::atom(), AppName::atom(), Host::list() | tuple(),
+                 Port::non_neg_integer(), Facility::atom(), HostName::string()) -> ets:tid().
+init_table(Name, AppName, Host, Port, Facility, HostName) when is_atom(Name), is_atom(AppName),
+                                                             is_list(Host) ; is_tuple(Host),
+                                                             is_integer(Port), is_atom(Facility) ->
     Name = ets:new(Name, [set, named_table, public, {read_concurrency, true}]),
     true = ets:insert_new(Name, [{app_name, AppName},
+                                 {hostname, HostName},
                                  {host, Host},
                                  {port, Port},
                                  {facility, Facility}]),
@@ -60,7 +62,7 @@ terminate_table(Name) ->
 build_packet(Name, Msg, Opts) ->
     AppName = get_app_name(Name, Opts),
     Pid = get_pid(Opts),
-    Hostname = get_hostname(Opts),
+    Hostname = get_hostname(Name, Opts),
     Timestamp = get_timestamp(Opts),
 
     Facility = get_facility(Name, Opts),
@@ -190,11 +192,17 @@ get_facility(Name, Opts) ->
         Facility when is_integer(Facility) -> Facility
     end.
 
-get_hostname(Opts) ->
+get_hostname(Name, Opts) ->
     case proplists:get_value(hostname, Opts) of
         undefined ->
-            {ok, Host} = inet:gethostname(),
-            Host;
+            case ets:lookup(Name, hostname) of
+                [] ->
+                    {ok, Host} = inet:gethostname(),
+                    catch ets:insert_new(Name, {hostname, Host}),
+                    Host;
+                [{_, Host}] ->
+                    Host
+            end;
         Atom when is_atom(Atom) -> atom_to_list(Atom);
         List when is_list(List) -> List;
         Binary when is_binary(Binary) -> Binary
